@@ -1,0 +1,22 @@
+{
+  "name": "lab03",
+  "version": "1.0.0",
+  "description": "[《Linux 网络编程》： libnet 详解](https://blog.csdn.net/yexiangCSDN/article/details/86064656)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sky-bro/libnet-hands-on.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/sky-bro/libnet-hands-on/issues"
+  },
+  "homepage": "https://github.com/sky-bro/libnet-hands-on#readme",
+  "dependencies": {
+    "express": "^4.16.4"
+  }
+}

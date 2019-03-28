@@ -1,106 +1,80 @@
-/*
-《Linux网络编程》： 原始套接字发送UDP报文
-*/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <net/if.h>				//struct ifreq
-#include <sys/ioctl.h>			//ioctl、SIOCGIFADDR
-#include <sys/socket.h>
-#include <netinet/ether.h>		//ETH_P_ALL
-#include <netpacket/packet.h>	//struct sockaddr_ll
+#include <unistd.h>
+#include <libnet.h>
 
-
-unsigned short checksum(unsigned short *buf, int nword);//校验和函数
 int main(int argc, char *argv[])
 {
-	//1.创建通信用的原始套接字
-	int sock_raw_fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+	char send_msg[1000] = "";
+	char err_buf[100] = "";
+	libnet_t *lib_net = NULL;
+	int lens = 0;
+	libnet_ptag_t lib_t = 0;
+	unsigned char src_mac[6] = {0x00,0x0c,0x29,0x97,0xc7,0xc1};//发送者网卡地址00:0c:29:97:c7:c1
+	unsigned char dst_mac[6] = {0x74,0x27,0xea,0xb5,0xff,0xd8};//接收者网卡地址‎74-27-EA-B5-FF-D8
+    char *src_ip_str = "192.168.31.163"; //源主机IP地址
+    char *dst_ip_str = "192.168.31.248"; //目的主机IP地址
+	unsigned long src_ip,dst_ip = 0;
 
-	//2.根据各种协议首部格式构建发送数据报
-	unsigned char send_msg[1024] = {
-		//--------------组MAC--------14------
-		0x74, 0x27, 0xea, 0xb5, 0xef, 0xd8, //dst_mac: 74-27-EA-B5-FF-D8
-		0xc8, 0x9c, 0xdc, 0xb7, 0x0f, 0x19, //src_mac: c8:9c:dc:b7:0f:19
-		0x08, 0x00,                         //类型：0x0800 IP协议
-		//--------------组IP---------20------
-		0x45, 0x00, 0x00, 0x00,             //版本号：4, 首部长度：20字节, TOS:0, --总长度--：
-		0x00, 0x00, 0x00, 0x00,				//16位标识、3位标志、13位片偏移都设置0
-		0x80, 17,   0x00, 0x00,				//TTL：128、协议：UDP（17）、16位首部校验和
-		10,  221,   20,  11,				//src_ip: 10.221.20.11
-		10,  221,   20,  10,				//dst_ip: 10.221.20.10
-		//--------------组UDP--------8+78=86------
-		0x1f, 0x90, 0x1f, 0x90,             //src_port:0x1f90(8080), dst_port:0x1f90(8080)
-		0x00, 0x00, 0x00, 0x00,               //#--16位UDP长度--30个字节、#16位校验和
-	};
+	lens = sprintf(send_msg, "%s", "this is for the udp test");
 
-	int len = sprintf(send_msg+42, "%s", "this is for the udp test");
-	if(len % 2 == 1)//判断len是否为奇数
+ 	lib_net = libnet_init(LIBNET_LINK_ADV, "eth0", err_buf);	//初始化
+	if(NULL == lib_net)
 	{
-		len++;//如果是奇数，len就应该加1(因为UDP的数据部分如果不为偶数需要用0填补)
-	}
-
-	*((unsigned short *)&send_msg[16]) = htons(20+8+len);//IP总长度 = 20 + 8 + len
-	*((unsigned short *)&send_msg[14+20+4]) = htons(8+len);//udp总长度 = 8 + len
-	//3.UDP伪头部
-	unsigned char pseudo_head[1024] = {
-		//------------UDP伪头部--------12--
-		10,  221,   20,  11,				//src_ip: 10.221.20.11
-		10,  221,   20,  10,				//dst_ip: 10.221.20.10
-		0x00, 17,   0x00, 0x00,             	//0,17,#--16位UDP长度--20个字节
-	};
-
-	*((unsigned short *)&pseudo_head[10]) = htons(8 + len);//为头部中的udp长度（和真实udp长度是同一个值）
-	//4.构建udp校验和需要的数据报 = udp伪头部 + udp数据报
-	memcpy(pseudo_head+12, send_msg+34, 8+len);//--计算udp校验和时需要加上伪头部--
-	//5.对IP首部进行校验
-	*((unsigned short *)&send_msg[24]) = htons(checksum((unsigned short *)(send_msg+14),20/2));
-	//6.--对UDP数据进行校验--
-	*((unsigned short *)&send_msg[40]) = htons(checksum((unsigned short *)pseudo_head,(12+8+len)/2));
-
-
-	//6.发送数据
-	struct sockaddr_ll sll;					//原始套接字地址结构
-	struct ifreq req;					//网络接口地址
-
-	strncpy(req.ifr_name, "eth0", IFNAMSIZ);			//指定网卡名称
-	if(-1 == ioctl(sock_raw_fd, SIOCGIFINDEX, &req))	//获取网络接口
-	{
-		perror("ioctl");
-		close(sock_raw_fd);
+		perror("libnet_init");
 		exit(-1);
 	}
 
-	/*将网络接口赋值给原始套接字地址结构*/
-	bzero(&sll, sizeof(sll));
-	sll.sll_ifindex = req.ifr_ifindex;
-	len = sendto(sock_raw_fd, send_msg, 14+20+8+len, 0 , (struct sockaddr *)&sll, sizeof(sll));
-	if(len == -1)
-	{
-		perror("sendto");
-	}
-	return 0;
-}
+	src_ip = libnet_name2addr4(lib_net,src_ip_str,LIBNET_RESOLVE);	//将字符串类型的ip转换为顺序网络字节流
+	dst_ip = libnet_name2addr4(lib_net,dst_ip_str,LIBNET_RESOLVE);
 
-/*******************************************************
-功能：
-	校验和函数
-参数：
-	buf: 需要校验数据的首地址
-	nword: 需要校验数据长度的一半
-返回值：
-	校验和
-*******************************************************/
-unsigned short checksum(unsigned short *buf, int nword)
-{
-	unsigned long sum;
-	for(sum = 0; nword > 0; nword--)
+	lib_t = libnet_build_udp(	//构造udp数据包
+								8080,
+								8080,
+								8+lens,
+								0,
+								send_msg,
+								lens,
+								lib_net,
+								0
+							);
+
+	lib_t = libnet_build_ipv4(	//构造ip数据包
+								20+8+lens,
+								0,
+								500,
+								0,
+								10,
+								17,
+								0,
+								src_ip,
+								dst_ip,
+								NULL,
+								0,
+								lib_net,
+								0
+							);
+
+	lib_t = libnet_build_ethernet(	//构造以太网数据包
+									(u_int8_t *)dst_mac,
+									(u_int8_t *)src_mac,
+									0x800, // 或者，ETHERTYPE_IP
+									NULL,
+									0,
+									lib_net,
+									0
+								);
+	int res = 0;
+	res = libnet_write(lib_net);	//发送数据包
+	if(-1 == res)
 	{
-		sum += htons(*buf);
-		buf++;
+		perror("libnet_write");
+		exit(-1);
 	}
-	sum = (sum>>16) + (sum&0xffff);
-	sum += (sum>>16);
-	return ~sum;
-}
+
+	libnet_destroy(lib_net);	//销毁资源
+
+	printf("----ok-----\n");
+	return 0;
+ }
