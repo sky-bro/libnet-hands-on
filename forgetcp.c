@@ -3,12 +3,20 @@
 #include <string.h>
 #include <unistd.h>
 #include <libnet.h>
-
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 
 int main(int argc, char *argv[])
 {
-	char send_msg[1000] = "";
+  int fd = open("./http-content.txt", O_RDONLY);
+	char send_msg[1000];
+  read(fd, send_msg, 1000);
+  close(fd);
+  printf("%s", send_msg);
+
+  char *device="wlp3s0";
 	char err_buf[100] = "";
 	libnet_t *lib_net = NULL;
 	int lens = 0;
@@ -19,9 +27,10 @@ int main(int argc, char *argv[])
     char *dst_ip_str = "192.168.31.248"; //目的主机IP地址
 	unsigned long src_ip,dst_ip = 0;
 
-	lens = sprintf(send_msg, "%s", "this is for the udp test");
+	// lens = sprintf(send_msg, "%s", "this is for the udp test");
+  lens = strlen(send_msg);
 
- 	lib_net = libnet_init(LIBNET_LINK_ADV, "eth0", err_buf);	//初始化
+ 	lib_net = libnet_init(LIBNET_LINK_ADV, device, err_buf);	//初始化
 	if(NULL == lib_net)
 	{
 		perror("libnet_init");
@@ -30,17 +39,45 @@ int main(int argc, char *argv[])
 
 	src_ip = libnet_name2addr4(lib_net,src_ip_str,LIBNET_RESOLVE);	//将字符串类型的ip转换为顺序网络字节流
 	dst_ip = libnet_name2addr4(lib_net,dst_ip_str,LIBNET_RESOLVE);
+/*
+libnet_ptag_t libnet_build_tcp(u_int16_t sp, u_int16_t dp,u_int32_t seq, u_int32_t ack,u_int8_t control, u_int16_t win,u_int16_t sum, u_int16_t urg,u_int16_t len, u_int8_t *payload,u_int32_t payload_s, libnet_t *l,libnet_ptag_t ptag );
+sp：源端口号
+dp：目的端口号
+seq：序号
+ack：ack 标记
+control：控制标记
+win：窗口大小
+sum：校验和，设为 0，libnet 自动填充
+urg：紧急指针
+len：tcp包长度
+payload：负载，为给应用程序发送的文本内容，可设置为 NULL
+payload_s：负载长度，或为 0
+l：libnet_init() 返回的 libnet * 指针
+ptag：协议标记，第一次组新的发送包时，这里写 0，同一个应用程序，下一次再组包时，这个位置的值写此函数的返回值。
 
-	lib_t = libnet_build_udp(	//构造udp数据包
-								8080,
-								8080,
-								8+lens,
-								0,
-								send_msg,
-								lens,
+返回值：
+成功：协议标记
+失败：-1
+*/
+	lib_t = libnet_build_tcp(	//构造udp数据包
+								8080, // src_port
+								8081, // dst_port
+                256, // seq
+                128, // ack
+                TH_PUSH | TH_ACK,
+                14600,
+                0,
+                0,
+                LIBNET_TCP_H + payload_s,
+                send_msg,
+                lens,
 								lib_net,
 								0
 							);
+  // if (lib_t == -1) {
+  //       printf("libnet_build_tcp failure\n");
+  //       return (-3);
+  //   };
 
 	lib_t = libnet_build_ipv4(	//构造ip数据包
 								20+8+lens,
@@ -48,7 +85,7 @@ int main(int argc, char *argv[])
 								500,
 								0,
 								10,
-								17,
+								IPPROTO_TCP,
 								0,
 								src_ip,
 								dst_ip,
