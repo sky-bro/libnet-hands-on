@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <string.h>
 #include <unistd.h>
 #include <libnet.h>
@@ -11,10 +12,10 @@
 int main(int argc, char *argv[])
 {
   int fd = open("./http-content.txt", O_RDONLY);
-	char send_msg[1000];
-  read(fd, send_msg, 1000);
-  close(fd);
-  printf("%s", send_msg);
+	char send_msg[1000] = {0};
+  // read(fd, send_msg, 1000);
+  // close(fd);
+  // printf("%s", send_msg);
 
   char *device="wlp3s0";
 	char err_buf[100] = "";
@@ -22,13 +23,18 @@ int main(int argc, char *argv[])
 	int lens = 0;
 	libnet_ptag_t lib_t = 0;
 	unsigned char src_mac[6] = {0x00,0x0c,0x29,0x97,0xc7,0xc1};//发送者网卡地址00:0c:29:97:c7:c1
-	unsigned char dst_mac[6] = {0x74,0x27,0xea,0xb5,0xff,0xd8};//接收者网卡地址‎74-27-EA-B5-FF-D8
-    char *src_ip_str = "192.168.31.163"; //源主机IP地址
-    char *dst_ip_str = "192.168.31.248"; //目的主机IP地址
+	// unsigned char dst_mac[6] = {0xff,0xff,0xff,0xff,0xff,0xff};//接收者网卡地址‎74-27-EA-B5-FF-D8
+  //58:69:6c:a5:e2:d3
+  unsigned char dst_mac[6] = {0x58,0x69,0x6c,0xa5,0xe2,0xd3};//接收者网卡地址‎74-27-EA-B5-FF-D8
+    char *src_ip_str = "172.20.12.34"; //源主机IP地址
+    // char *dst_ip_str = "172.20.0.1"; //目的主机IP地址
+    // 219.217.228.102
+    char *dst_ip_str = "219.217.228.102"; //目的主机IP地址
 	unsigned long src_ip,dst_ip = 0;
 
 	// lens = sprintf(send_msg, "%s", "this is for the udp test");
   lens = strlen(send_msg);
+  printf("strlen: %d\n", lens);
 
  	lib_net = libnet_init(LIBNET_LINK_ADV, device, err_buf);	//初始化
 	if(NULL == lib_net)
@@ -38,6 +44,9 @@ int main(int argc, char *argv[])
 	}
 
 	src_ip = libnet_name2addr4(lib_net,src_ip_str,LIBNET_RESOLVE);	//将字符串类型的ip转换为顺序网络字节流
+  // srand(time(NULL));
+  // src_ip = rand()%2e9;
+  src_ip |= ((rand() % 0xffff)<<16);
 	dst_ip = libnet_name2addr4(lib_net,dst_ip_str,LIBNET_RESOLVE);
 /*
 libnet_ptag_t libnet_build_tcp(u_int16_t sp, u_int16_t dp,u_int32_t seq, u_int32_t ack,u_int8_t control, u_int16_t win,u_int16_t sum, u_int16_t urg,u_int16_t len, u_int8_t *payload,u_int32_t payload_s, libnet_t *l,libnet_ptag_t ptag );
@@ -60,17 +69,19 @@ ptag：协议标记，第一次组新的发送包时，这里写 0，同一个�
 失败：-1
 */
 	lib_t = libnet_build_tcp(	//构造udp数据包
-								8080, // src_port
-								8081, // dst_port
-                256, // seq
-                128, // ack
-                TH_PUSH | TH_ACK,
+								rand()%65535, // src_port
+								80, // dst_port
+                0x6fa13d27, // seq
+                0, // ack
+                TH_SYN,
                 14600,
                 0,
                 0,
-                LIBNET_TCP_H + payload_s,
-                send_msg,
-                lens,
+                LIBNET_TCP_H + lens,
+                // send_msg,
+                NULL,
+                // lens,
+                0,
 								lib_net,
 								0
 							);
@@ -80,7 +91,7 @@ ptag：协议标记，第一次组新的发送包时，这里写 0，同一个�
   //   };
 
 	lib_t = libnet_build_ipv4(	//构造ip数据包
-								20+8+lens,
+								40,
 								0,
 								500,
 								0,
