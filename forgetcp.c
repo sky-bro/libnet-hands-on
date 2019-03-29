@@ -9,32 +9,77 @@
 #include <fcntl.h>
 
 
+void sendsyn();
+
+char device[100]="wlp3s0";
+char err_buf[LIBNET_ERRBUF_SIZE];
+libnet_t *lib_net = NULL;
+char src_ip_str[16] = "172.20.60.154"; //源主机IP地址
+// char *dst_ip_str = "172.20.0.1"; //目的主机IP地址
+// 219.217.228.102
+char dst_ip_str[16] = "219.217.228.102"; //目的主机IP地址
+int dst_port = 80;
+int src_port = 12345;
+int loopCount = 10;
+
 int main(int argc, char *argv[])
 {
-  int fd = open("./http-content.txt", O_RDONLY);
+  char *cmds = "-i 219.217.228.102 ---- dst_ip\n-p 80 ---- dst_port\n-d wlp3s0 ---- device\n-l 10 ---- loopCount\n";
+  char ch;
+  int i_len, d_len;
+	while ((ch = getopt(argc, argv, "i:p:d:l:")) != EOF /*-1*/) {
+		// printf("optind: %d\n", optind);
+   	switch (ch){
+				 case 'i': 
+								 i_len = strlen(optarg)<15?strlen(optarg):15;
+								 strncpy(dst_ip_str, optarg, i_len);
+								 break;
+         case 'p': // 是否采用monitor mode
+								 dst_port = atoi(optarg);
+								 break;
+         case 'd':
+                 d_len = strlen(optarg)<99?strlen(optarg):99;
+								 strncpy(device, optarg, d_len);
+								 break;
+         case 'l':
+                 loopCount = atoi(optarg);
+								 break;
+				 default:
+				 				printf("%s", cmds);
+								return 0;
+		}
+	}
+	do
+	{
+		sendsyn();
+		sleep(1);
+    loopCount--;
+	}while(loopCount>0);
+
+	printf("----ok-----\n");
+	return 0;
+}
+
+void sendsyn(){
+  // int fd = open("./http-content.txt", O_RDONLY);
 	char send_msg[1000] = {0};
   // read(fd, send_msg, 1000);
   // close(fd);
   // printf("%s", send_msg);
-
-  char *device="wlp3s0";
-	char err_buf[100] = "";
-	libnet_t *lib_net = NULL;
-	int lens = 0;
+  int lens = 0;
 	libnet_ptag_t lib_t = 0;
 	unsigned char src_mac[6] = {0x00,0x0c,0x29,0x97,0xc7,0xc1};//发送者网卡地址00:0c:29:97:c7:c1
+  // c8:ff:28:3d:71:fd
+  // unsigned char src_mac[6] = {0xc8,0xff,0x28,0x3d,0x71,0xfd};//发送者网卡地址00:0c:29:97:c7:c1
 	// unsigned char dst_mac[6] = {0xff,0xff,0xff,0xff,0xff,0xff};//接收者网卡地址‎74-27-EA-B5-FF-D8
   //58:69:6c:a5:e2:d3
   unsigned char dst_mac[6] = {0x58,0x69,0x6c,0xa5,0xe2,0xd3};//接收者网卡地址‎74-27-EA-B5-FF-D8
-    char *src_ip_str = "172.20.12.34"; //源主机IP地址
-    // char *dst_ip_str = "172.20.0.1"; //目的主机IP地址
-    // 219.217.228.102
-    char *dst_ip_str = "219.217.228.102"; //目的主机IP地址
+
 	unsigned long src_ip,dst_ip = 0;
 
 	// lens = sprintf(send_msg, "%s", "this is for the udp test");
   lens = strlen(send_msg);
-  printf("strlen: %d\n", lens);
+  // printf("strlen: %d\n", lens);
 
  	lib_net = libnet_init(LIBNET_LINK_ADV, device, err_buf);	//初始化
 	if(NULL == lib_net)
@@ -68,10 +113,11 @@ ptag：协议标记，第一次组新的发送包时，这里写 0，同一个�
 成功：协议标记
 失败：-1
 */
+  src_port = rand()%65535;
 	lib_t = libnet_build_tcp(	//构造udp数据包
-								rand()%65535, // src_port
-								80, // dst_port
-                0x6fa13d27, // seq
+								src_port, // src_port
+								dst_port, // dst_port
+                0x6fa13d27&(rand()%0xff), // seq
                 0, // ack
                 TH_SYN,
                 14600,
@@ -117,14 +163,12 @@ ptag：协议标记，第一次组新的发送包时，这里写 0，同一个�
 								);
 	int res = 0;
 	res = libnet_write(lib_net);	//发送数据包
+  char* tmp = libnet_addr2name4(src_ip, LIBNET_DONT_RESOLVE);
+  printf("send from %s:%d to %s:%d\n", tmp, src_port, dst_ip_str, dst_port);
+  libnet_destroy(lib_net);	//销毁资源
 	if(-1 == res)
 	{
 		perror("libnet_write");
 		exit(-1);
 	}
-
-	libnet_destroy(lib_net);	//销毁资源
-
-	printf("----ok-----\n");
-	return 0;
- }
+}
